@@ -3,7 +3,7 @@ let s:save_cpo = &cpo| set cpo&vim
 scriptencoding utf-8
 "=============================================================================
 let g:autocloser_def = exists('g:autocloser_def') ? g:autocloser_def : {"*": ['"', "'", '`', '( )', '[ ]', '{ }'], 'javascript|typescript': ['`', '/']}
-let g:autocloser_enable_separator_turnback = 1
+let g:autocloser_enable_separator_turnback = 0
 let g:autocloser_def = {'add': {"*": ['"', "'", '`', '( )', '[ ]', '{ }'], 'javascript|typescript': ['`', '/']}}
 let g:autocloser_def_removal = {}
 "let g:autocloser_def = {"*": {"quotes": ['"', "'", '％', '¶'], "pairs": ['( )', '[ ]', '{ }', '「 」']}}

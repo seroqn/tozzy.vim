@@ -117,10 +117,12 @@ function! autocloser#init() abort "{{{
   let [s:_c2def, s:_changedtick, s:batch_len] = [{}, b:changedtick, 0]
   let s:inhibition_pats = s:obtain_inhibition_pats()
   let items = items(g:autocloser_def)
-  for [key, ds] in s:parse_collectionstr(s:filter_defitems(items))
+  let items = s:parse_collectionstr(s:filter_by_buftype(items))
+  let expats = s:exclusion_pat(items)
+  for [key, ds] in items
     let condis = split(key, '|')
     for d in ds
-      if d=~'^\s*$'
+      if d=~'^\s*$' || index(expats, d)!=-1
         continue
       end
       let sep = stridx(d, ' ')
@@ -140,13 +142,25 @@ function! autocloser#init() abort "{{{
   endfor
 endfunc
 "}}}
-function! s:filter_defitems(items) abort "{{{
+function! s:filter_by_buftype(items) abort "{{{
   let ret = []
   let [fts, bext] = [split(&ft, '\.'), expand('%:e')]
   for item in a:items
     for condi in split(item[0], '|')
       if ((condi =~ '^.' && bext ==? condi[1:]) || match(fts, substitute(condi, '\*', '.\\+', 'g'))!=-1)
         let ret += [item]
+      end
+    endfor
+  endfor
+  return ret
+endfunc
+"}}}
+function! s:exclusion_pat(items) abort "{{{
+  let ret = []
+  for [_, ds] in a:items
+    for d in ds
+      if d=~'^\s\+'
+        let ret += [substitute(d, '^\s*', '', '')]
       end
     endfor
   endfor
