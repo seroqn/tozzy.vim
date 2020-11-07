@@ -20,8 +20,8 @@ function! s:MineCommon.IsValidPos(ctx) abort "{{{
   return self.row == a:ctx.Row && a:ctx.CrrLine[: self.Colx-1] ==# self.leftlineQ
 endfunc
 "}}}
-function! s:MineCommon.IsCrrNowCharEqualStopBgn(ctx) abort "{{{
-  return a:ctx.Colx==0 ? 0 : matchstr(a:ctx.CrrLine[: a:ctx.Colx-1], '.$') ==# matchstr(self.Stop, '^.')
+function! s:MineCommon.IsCrrNowCharEqualClosingBgn(ctx) abort "{{{
+  return a:ctx.Colx==0 ? 0 : matchstr(a:ctx.CrrLine[: a:ctx.Colx-1], '.$') ==# matchstr(self.Closing, '^.')
 endfunc
 "}}}
 let s:QuoteMine = {}
@@ -31,13 +31,13 @@ function! s:newQuoteMine(def, ctxer) abort "{{{
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
   let u.Colx = a:ctxer.Colx
-  let u.Start = a:def.start
-  let u.Stop = a:def.trig
+  let u.Opening = a:def.Opening
+  let u.Closing = a:def.Trig
   return u
 endfunc
 "}}}
 function! s:QuoteMine.IsIgnitable(ctx) abort "{{{
-  return a:ctx.CrrLine[a:ctx.Colx :] !~# '^\V'. escape(self.Stop, '\')
+  return a:ctx.CrrLine[a:ctx.Colx :] !~# '^\V'. escape(self.Closing, '\')
 endfunc
 "}}}
 let s:PairMine = {}
@@ -46,27 +46,27 @@ function! s:newPairMine(def, ctxer) abort "{{{
   let u.row = a:ctxer.Row
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
-  let u.startx = a:def.startx
-  let u.trig = a:def.trig
-  let u.orgStop = a:def.stop
+  let u.openingx = a:def.Openingx
+  let u.trig = a:def.Trig
+  let u.orgClosing = a:def.Closing
 
   let u.Colx = a:ctxer.Colx
-  let u.Start = a:def.start
-  let u.Stop = a:def.stop
+  let u.Opening = a:def.Opening
+  let u.Closing = a:def.Closing
 
-  let u.OrgStart = a:def.start
+  let u.OrgOpening = a:def.Opening
   return u
 endfunc
 "}}}
 function! s:PairMine.IsIgnitable(ctx) abort "{{{
-  return !self.IsCrrNowCharEqualStopBgn(a:ctx)
+  return !self.IsCrrNowCharEqualClosingBgn(a:ctx)
 endfunc
 "}}}
 function! s:PairMine.Accum(def, ctxer) abort "{{{
   let self.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
-  let self.startx = self.startx. a:def.startx
+  let self.openingx = self.openingx. a:def.Openingx
   let self.Colx = a:ctxer.Colx
-  let self.Stop = self.Stop. a:def.stop
+  let self.Closing = self.Closing. a:def.Closing
 endfunc
 "}}}
 let s:Contexter = {}
@@ -92,9 +92,9 @@ endfunc
 function! s:Contexter.FailInQuote(def) abort "{{{
   if self.RightLine =~# '^\V'. self.TrigE " 右隣に同じ字なく
     return 1
-  elseif self.LeftLine !~# '\(^\|[^[:alnum:]_\\]\)\V'. escape(a:def.startx, '\'). '\$' " 左隣が英数など以外で始まり
+  elseif self.LeftLine !~# '\(^\|[^[:alnum:]_\\]\)\V'. escape(a:def.Openingx, '\'). '\$' " 左隣が英数など以外で始まり
     return 2
-  elseif self.Colx!=0 && self.PreChar ==# self.Trig && a:def.startx !~# '\V'. self.TrigE. '\$' " 左隣に同じ字がある場合はstartxで定義されている
+  elseif self.Colx!=0 && self.PreChar ==# self.Trig && a:def.Openingx !~# '\V'. self.TrigE. '\$' " 左隣に同じ字がある場合はOpeningxで定義されている
     return 3
   end
   return 0
@@ -103,20 +103,20 @@ endfunc
 function! s:Contexter.FailInPair(def) abort "{{{
   if self.RightLine =~# '^\w'
     return 1
-  elseif self.LeftLine !~# (a:def.start =~# '^\w' ? '\(^\|[^[:alnum:]_]\)\V' : '\V'). escape(a:def.startx, '\'). '\$'
+  elseif self.LeftLine !~# (a:def.Opening =~# '^\w' ? '\(^\|[^[:alnum:]_]\)\V' : '\V'). escape(a:def.Openingx, '\'). '\$'
     return 2
   end
   return 0
 endfunc
 "}}}
 
-function! autocloser#init() abort "{{{
-  if !exists('g:autocloser_def')
+function! autoclosing#init() abort "{{{
+  if !exists('g:autoclosing_def')
     return
   end
   let [s:_c2def, s:_changedtick, s:batch_len] = [{}, b:changedtick, 0]
   let s:inhibition_pats = s:obtain_inhibition_pats()
-  let items = items(g:autocloser_def)
+  let items = items(g:autoclosing_def)
   let items = s:parse_collectionstr(s:filter_by_buftype(items))
   let expats = s:exclusion_pat(items)
   for [key, ds] in items
@@ -131,13 +131,13 @@ function! autocloser#init() abort "{{{
       elseif sep == -1
         let ms = matchlist(d, '^\(.*\)\(.\)$')
         let trig = ms[2]
-        let s:_c2def[trig] = get(s:_c2def, trig, []) + [{'condis': condis, 'startx': ms[1], 'trig': trig, 'start': d, 'type': 'quote'}]
+        let s:_c2def[trig] = get(s:_c2def, trig, []) + [{'Condis': condis, 'Openingx': ms[1], 'Trig': trig, 'Opening': d, 'Type': 'quote'}]
         continue
       end
-      let [start, stop] = [d[:sep-1], d[sep+1:]]
-      let ms = matchlist(start, '^\(.*\)\(.\)$')
+      let [opening, closing] = [d[:sep-1], d[sep+1:]]
+      let ms = matchlist(opening, '^\(.*\)\(.\)$')
       let trig = ms[2]
-      let s:_c2def[trig] = get(s:_c2def, trig, []) + [{'condis': condis, 'startx': ms[1], 'trig': trig, 'start': start, 'stop': stop, 'type': 'pair'}]
+      let s:_c2def[trig] = get(s:_c2def, trig, []) + [{'Condis': condis, 'Openingx': ms[1], 'Trig': trig, 'Opening': opening, 'Closing': closing, 'Type': 'pair'}]
     endfor
   endfor
 endfunc
@@ -215,20 +215,20 @@ function! s:pile(collections, i) abort "{{{
   return ret
 endfunc
 "}}}
-function! autocloser#insert_pre() abort "{{{
+function! autoclosing#insert_pre() abort "{{{
   if !s:during_feedkeys
     let s:batch_len += 1
   end
 endfunc
 "}}}
-function! autocloser#cleanup() abort "{{{
+function! autoclosing#cleanup() abort "{{{
   let [s:mines, s:within_butt, s:almostvalid, s:during_feedkeys, s:feedkeys, s:save_row, s:save_colx] = [[], {}, {}, 0, '', 0, 0]
   unlet! s:_c2def s:inhibition_pats s:_changedtick s:batch_len s:save_row s:save_colx
 endfunc
 "}}}
 
 let [s:during_feedkeys, s:save_row, s:save_colx, s:feedkeys] = [0, 0, 0, '']
-function! autocloser#chk_et_append() abort "{{{
+function! autoclosing#chk_et_append() abort "{{{
   let ctx = {'Row': line('.'), 'Colx': col('.')-1, 'CrrLine': getline('.')}
   if s:during_feedkeys && s:save_row == ctx.Row
     let targstr = ctx.CrrLine[s:save_colx : ctx.Colx-1]
@@ -263,14 +263,14 @@ function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
       let i += offset
       continue
     elseif def!={}
-      let s:mines += [def.type==#'quote' ? s:newQuoteMine(def, ctxer) : s:newPairMine(def, ctxer)]
+      let s:mines += [def.Type==#'quote' ? s:newQuoteMine(def, ctxer) : s:newPairMine(def, ctxer)]
     end
     let i += 1
   endwhile
   let c = targchars[-1]
   let def = s:obtain_def(ctxer.About(c, a:ctx.Colx))
   let result = s:or_chain(ctxer, def, feeds,
-    \ function('s:complement_premine_stop'), function('s:resemble_premine'), function('s:handle_inserted_1char_n_closing'), function('s:set_mine'), function('s:sep_inputted_then_turn'))
+    \ function('s:complement_premine_closing'), function('s:resemble_premine'), function('s:handle_inserted_1char_n_closing'), function('s:set_mine'), function('s:sep_inputted_then_turn'))
   call s:ignite_mines(ctxer, feeds)
   if feeds==[]
     return result
@@ -296,19 +296,19 @@ endfunc
 "}}}
 
 function! s:offset_premine(ctxer) abort "{{{
-  if s:mines==[] || a:ctxer.RightLine !~# '^\V'. escape(s:mines[-1].Stop, '\')
+  if s:mines==[] || a:ctxer.RightLine !~# '^\V'. escape(s:mines[-1].Closing, '\')
     return 0
   end
   let mine = remove(s:mines, -1)
-  return strchars(mine.Stop)
+  return strchars(mine.Closing)
 endfunc
 "}}}
-function! s:complement_premine_stop(ctxer, _, feeds) abort "{{{
-  if s:mines==[] || matchstr(s:mines[-1].Stop, '^.') !=# a:ctxer.Trig
+function! s:complement_premine_closing(ctxer, _, feeds) abort "{{{
+  if s:mines==[] || matchstr(s:mines[-1].Closing, '^.') !=# a:ctxer.Trig
     return ''
   end
   let mine = remove(s:mines, -1)
-  call add(a:feeds , substitute(mine.Stop, '^.', '', ''))
+  call add(a:feeds , substitute(mine.Closing, '^.', '', ''))
   let [s:gone_butt, s:almostvalid] = [mine, mine]
   return 'handle_premine: complemented closing'
 endfunc
@@ -318,23 +318,23 @@ function! s:resemble_premine(ctxer, def, _) abort "{{{
     return ''
   end
   let mine = s:mines[-1]
-  if get(mine, 'OrgStart', '') ==# a:def.start " 同じstartを持つなら重ねる
+  if get(mine, 'OrgOpening', '') ==# a:def.Opening " 同じOpeningを持つなら重ねる
     call mine.Accum(a:def, a:ctxer)
     return 'handle_premine: accumulated'
-  elseif matchstr(mine.Start, '^.') ==# matchstr(a:def.start, '^.') " 開始文字が同じ場合、復活の可能性
+  elseif matchstr(mine.Opening, '^.') ==# matchstr(a:def.Opening, '^.') " 開始文字が同じ場合、復活の可能性
     let s:almostvalid = remove(s:mines, -1)
   end
   return ''
 endfunc
 "}}}
 function! s:handle_inserted_1char_n_closing(ctxer, _, feeds) abort "{{{
-  if s:within_butt=={} || !(matchstr(s:within_butt.Stop, '^.') ==# a:ctxer.Trig && a:ctxer.RightLine =~# '^\V'. escape(s:within_butt.Stop, '\'))
+  if s:within_butt=={} || !(matchstr(s:within_butt.Closing, '^.') ==# a:ctxer.Trig && a:ctxer.RightLine =~# '^\V'. escape(s:within_butt.Closing, '\'))
     return ''
   end
   if s:mines!=[] && s:mines[-1].Colx == a:ctxer.Colx-1 " '`"`' などの入れ子になったトリガ対策
     call remove(s:mines, -1)
   end
-  call add(a:feeds , "\<C-g>U\<BS>". repeat("\<C-g>U\<Right>", strchars(s:within_butt.Stop)))
+  call add(a:feeds , "\<C-g>U\<BS>". repeat("\<C-g>U\<Right>", strchars(s:within_butt.Closing)))
   let s:within_butt = {}
   return 'handle_inserted_1char_n_closing'
 endfunc
@@ -343,18 +343,18 @@ function! s:set_mine(ctxer, def, feeds) abort "{{{
   if a:def=={}
     return ''
   end
-  let s:mines += [a:def.type==#'quote' ? s:newQuoteMine(a:def, a:ctxer) : s:newPairMine(a:def, a:ctxer)]
+  let s:mines += [a:def.Type==#'quote' ? s:newQuoteMine(a:def, a:ctxer) : s:newPairMine(a:def, a:ctxer)]
   return 'set_mine'
 endfunc
 "}}}
 function! s:sep_inputted_then_turn(ctxer, _, feeds) abort "{{{
-  if s:gone_butt=={} || !g:autocloser_enable_separator_turnback
+  if s:gone_butt=={} || !g:autoclosing_enable_separator_turnback
     return ''
-  elseif !(index(s:EMPBACK_SEPS, a:ctxer.Trig)!=-1 && s:gone_butt.IsValidPos(a:ctxer) && a:ctxer.LeftLine =~# '\V'. escape(s:gone_butt.Start. s:gone_butt.Stop, '\'). '\$')
+  elseif !(index(s:EMPBACK_SEPS, a:ctxer.Trig)!=-1 && s:gone_butt.IsValidPos(a:ctxer) && a:ctxer.LeftLine =~# '\V'. escape(s:gone_butt.Opening. s:gone_butt.Closing, '\'). '\$')
     let s:gone_butt = {}
     return ''
   end
-  call add(a:feeds , repeat("\<C-g>U\<Left>", strchars(s:gone_butt.Stop. a:ctxer.Trig)))
+  call add(a:feeds , repeat("\<C-g>U\<Left>", strchars(s:gone_butt.Closing. a:ctxer.Trig)))
   let s:gone_butt = {}
   return 'sep_inputted_then_turn'
 endfunc
@@ -373,7 +373,7 @@ function! s:ignite_mines(ctxer, feeds) abort "{{{
     elseif !(mine.IsIgnitable(a:ctxer) || lenM > 1 && is_first)
       let s:almostvalid = mine
     else
-      call add(a:feeds, mine.Stop. repeat("\<C-g>U\<Left>", strchars(mine.Stop)))
+      call add(a:feeds, mine.Closing. repeat("\<C-g>U\<Left>", strchars(mine.Closing)))
       let s:within_butt = mine
     end
     let is_first = 0
@@ -396,7 +396,7 @@ endfunc
 function! s:obtain_inhibition_pats() abort "{{{
   let pats = []
   let [fts, bext] = [split(&ft, '\.'), expand('%:e')]
-  for [key, pat] in items(g:autocloser_inhibition_pat)
+  for [key, pat] in items(g:autoclosing_inhibition_pat)
     for ftpat in split(key, '|')
       if (ftpat =~ '^.' && bext ==? ftpat[1:]) || match(fts, substitute(ftpat, '\*', '.\\+', 'g'))!=-1
         let pats += [pat]
@@ -413,10 +413,10 @@ function! s:obtain_def(ctxer) abort "{{{
   let dfs1 = []
   "let [fts, bext] = [split(&ft, '\.'), expand('%:e')]
   for def in s:_c2def[a:ctxer.Trig]
-    for condi in def.condis
+    for condi in def.Condis
       "if ((condi =~ '^.' && bext ==? condi[1:]) || match(fts, substitute(condi, '\*', '.\\+', 'g'))!=-1)
-      if !a:ctxer[def.type=="quote" ? 'FailInQuote' : 'FailInPair'](def)
-        let dfs1 += [{'len': len(def.startx), 'condi': condi, 'type': def.type, 'def': def}]
+      if !a:ctxer[def.Type=="quote" ? 'FailInQuote' : 'FailInPair'](def)
+        let dfs1 += [{'len': len(def.Openingx), 'condi': condi, 'type': def.Type, 'def': def}]
         break
       end
       "end
@@ -437,7 +437,7 @@ function! s:_sort_df(a, b) abort "{{{
     end
   end
   let ret = a.len - b.len
-  return ret || a.type==#b.type ? ret : a.type=='pair' ? -1 : 1
+  return ret || a.Type==#b.Type ? ret : a.Type=='pair' ? -1 : 1
 endfunc
 "}}}
 function! s:matchstrpos(str, pat, start) abort "{{{
