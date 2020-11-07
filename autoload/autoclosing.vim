@@ -11,7 +11,7 @@ let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
 let s:batch_len = 0
 
-let s:MineCommon = {}
+let s:MineCommon = {'row': 0, 'Colx': 0, 'leftlineQ': '', 'Closing': ''}
 function! s:MineCommon.CharDistanceTo(ctx) abort "{{{
   return a:ctx.Colx==0 ? 0 : strchars(a:ctx.CrrLine[self.Colx : a:ctx.Colx-1])
 endfunc
@@ -26,10 +26,10 @@ endfunc
 "}}}
 let s:QuoteMine = {}
 function! s:newQuoteMine(def, ctxer) abort "{{{
-  let u = extend(copy(s:QuoteMine), s:MineCommon)
-  let u.row = a:ctxer.Row
+  let u = extend(copy(s:QuoteMine), s:MineCommon, 'keep')
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
+  let u.row = a:ctxer.Row
   let u.Colx = a:ctxer.Colx
   let u.Opening = a:def.Opening
   let u.Closing = a:def.Trig
@@ -40,20 +40,19 @@ function! s:QuoteMine.IsIgnitable(ctx) abort "{{{
   return a:ctx.CrrLine[a:ctx.Colx :] !~# '^\V'. escape(self.Closing, '\')
 endfunc
 "}}}
+function! s:QuoteMine.UsableNL(ctx) abort "{{{
+  return 0
+endfunc
+"}}}
 let s:PairMine = {}
 function! s:newPairMine(def, ctxer) abort "{{{
-  let u = extend(copy(s:PairMine), s:MineCommon)
-  let u.row = a:ctxer.Row
+  let u = extend(copy(s:PairMine), s:MineCommon, 'keep')
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
-  let u.openingx = a:def.Openingx
-  let u.trig = a:def.Trig
-  let u.orgClosing = a:def.Closing
-
+  let u.row = a:ctxer.Row
   let u.Colx = a:ctxer.Colx
   let u.Opening = a:def.Opening
   let u.Closing = a:def.Closing
-
   let u.OrgOpening = a:def.Opening
   return u
 endfunc
@@ -64,9 +63,16 @@ endfunc
 "}}}
 function! s:PairMine.Accum(def, ctxer) abort "{{{
   let self.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
-  let self.openingx = self.openingx. a:def.Openingx
   let self.Colx = a:ctxer.Colx
   let self.Closing = self.Closing. a:def.Closing
+endfunc
+"}}}
+function! s:PairMine.UsableNL(ctx) abort "{{{
+  return self.row+1 == a:ctx.Row
+endfunc
+"}}}
+function! s:PairMine.AppendNL(ctx) abort "{{{
+  call append(a:ctx.Row, repeat(' ', indent(self.row)). self.Closing)
 endfunc
 "}}}
 let s:Contexter = {}
@@ -284,7 +290,11 @@ function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
 endfunc
 "}}}
 function! s:caseof_noinput(ctx, is_changed) abort "{{{
-  let [s:within_butt, s:gone_butt, s:mines] = [{}, {}, []]
+  let [s:within_butt, s:gone_butt] = [{}, {}]
+  if a:is_changed && s:mines!=[] && s:mines[0].UsableNL(a:ctx)
+    call s:mines[0].AppendNL(a:ctx)
+  end
+  let s:mines = []
   if !(a:is_changed && s:almostvalid!={} && s:almostvalid.IsValidPos(a:ctx))
     let s:almostvalid = {}
   elseif s:almostvalid.IsIgnitable(a:ctx) && a:ctx.Colx == s:almostvalid.Colx
