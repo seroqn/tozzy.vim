@@ -262,7 +262,7 @@ function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
     if offset
       let i += offset
       continue
-    elseif s:resemble_premine(ctxer, def, [])=='' && def!={}
+    elseif def!={}
       let s:mines += [def.type==#'quote' ? s:newQuoteMine(def, ctxer) : s:newPairMine(def, ctxer)]
     end
     let i += 1
