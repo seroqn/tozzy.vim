@@ -2,14 +2,35 @@ if exists('s:save_cpo')| finish| endif
 let s:save_cpo = &cpo| set cpo&vim
 scriptencoding utf-8
 "=============================================================================
-"let s:QUOTE_STARTER = '[-^~|*+,./:;<=>?@!''`"#$%&()[\]{}[:blank:]、。]' " 日本語の句読点の後のクォートを有効にしたい
 let s:EMPBACK_SEPS = [',']
-
 let s:mines = []
 let s:almostvalid = {} " 設置されたのに発火条件を満たさなくなったもの. <BS>で発動条件を満たすと復活する
 let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
+let s:leavable_str = ''
+let s:leavable_rightline = ''
 let s:batch_len = 0
+
+function! autoclosing#is_leavable() abort "{{{
+  if s:leavable_str==''
+    return 0
+  end
+  let colx = col('.')-1
+  let rightline = colx==0 ? getline('.') : getline('.')[colx :]
+  let idx = stridx(rightline, s:leavable_str)
+  if idx==-1 || rightline[idx+len(s:leavable_str) :] !=# s:leavable_rightline
+    return 0
+  end
+  return idx+1
+endfunc
+"}}}
+function! autoclosing#leave() abort "{{{
+  let idx = autoclosing#is_leavable()-1
+  let str = repeat("\<C-g>U\<Right>", strchars((idx==0 ? '' : rightline[: idx-1]). s:leavable_str))
+  let [s:leavable_str, s:leavable_rightline] = ['', '']
+  return str
+endfunc
+"}}}
 
 let s:MineCommon = {'row': 0, 'Colx': 0, 'leftlineQ': '', 'Closing': ''}
 function! s:MineCommon.CharDistanceTo(ctx) abort "{{{
@@ -291,7 +312,9 @@ endfunc
 "}}}
 function! s:caseof_noinput(ctx, is_changed) abort "{{{
   let [s:within_butt, s:gone_butt] = [{}, {}]
-  if a:is_changed && s:mines!=[] && s:mines[0].UsableNL(a:ctx)
+  if !a:is_changed
+    let [s:leavable_str, s:leavable_rightline] = ['', '']
+  elseif s:mines!=[] && s:mines[0].UsableNL(a:ctx)
     call s:mines[0].AppendNL(a:ctx)
   end
   let s:mines = []
@@ -364,7 +387,9 @@ function! s:sep_inputted_then_turn(ctxer, _, feeds) abort "{{{
     let s:gone_butt = {}
     return ''
   end
+  let str = s:gone_butt.Closing. a:ctxer.Trig
   call add(a:feeds , repeat("\<C-g>U\<Left>", strchars(s:gone_butt.Closing. a:ctxer.Trig)))
+  let [s:leavable_str, s:leavable_rightline] = [str, a:ctxer.RightLine]
   let s:gone_butt = {}
   return 'sep_inputted_then_turn'
 endfunc
@@ -385,12 +410,13 @@ function! s:ignite_mines(ctxer, feeds) abort "{{{
     else
       call add(a:feeds, mine.Closing. repeat("\<C-g>U\<Left>", strchars(mine.Closing)))
       let s:within_butt = mine
+      let s:leavable_rightline = a:ctxer.RightLine[len(s:leavable_str) :]
+      let s:leavable_str = mine.Closing. s:leavable_str
     end
     let is_first = 0
   endwhile
 endfunc
 "}}}
-
 
 
 function! s:or_chain(ctxer, def, feeds, ...) abort "{{{
