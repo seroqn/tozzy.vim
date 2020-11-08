@@ -105,7 +105,9 @@ function! s:PairMine.CanAppendNL(ctx) abort "{{{
 endfunc
 "}}}
 function! s:PairMine.AppendNL(ctx) abort "{{{
-  call append(a:ctx.Row, repeat(' ', indent(self.Row)). self.Closing)
+  let idN = indent(self.Row)
+  let space = &expandtab ? repeat(' ', idN) : repeat("\t", idN / &tabstop). repeat(' ', idN % &tabstop)
+  call append(a:ctx.Row, space. self.Closing)
 endfunc
 "}}}
 let s:Contexter = {}
