@@ -7,38 +7,50 @@ let s:mines = []
 let s:almostvalid = {} " 設置されたのに発火条件を満たさなくなったもの. <BS>で発動条件を満たすと復活する
 let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
-let s:leavable_str = ''
-let s:leavable_rightline = ''
 let s:batch_len = 0
 
 function! autoclosing#is_leavable() abort "{{{
-  if s:leavable_str==''
-    return 0
-  end
-  let colx = col('.')-1
-  let rightline = colx==0 ? getline('.') : getline('.')[colx :]
-  let idx = stridx(rightline, s:leavable_str)
-  if idx==-1 || rightline[idx+len(s:leavable_str) :] !=# s:leavable_rightline
-    return 0
-  end
-  return idx+1
+  return s:Leavablee.GetRhs()!=''
 endfunc
 "}}}
 function! autoclosing#leave() abort "{{{
-  let idx = autoclosing#is_leavable()-1
-  let str = repeat("\<C-g>U\<Right>", strchars((idx==0 ? '' : rightline[: idx-1]). s:leavable_str))
-  let [s:leavable_str, s:leavable_rightline] = ['', '']
-  return str
+  let rhs = s:Leavablee.GetRhs()
+  call s:Leavablee.Reset()
+  return rhs
 endfunc
 "}}}
 
-let s:MineCommon = {'row': 0, 'Colx': 0, 'leftlineQ': '', 'Closing': ''}
+let s:Leavablee = {'closing': '', 'rightline': ''}
+function! s:Leavablee.Reset() abort "{{{
+  let [self.closing, self.rightline] = ['', '']
+  return self
+endfunc
+"}}}
+function! s:Leavablee.Store(closing, ctxer) abort "{{{
+  let self.rightline = a:ctxer.RightLine[len(self.closing) :]
+  let self.closing = a:closing. self.closing
+endfunc
+"}}}
+function! s:Leavablee.GetRhs() abort "{{{
+  if self.closing == ''
+    return ''
+  end
+  let colx = col('.')-1
+  let rightline = colx==0 ? getline('.') : getline('.')[colx :]
+  let idx = stridx(rightline, self.closing)
+  if idx==-1 || rightline[idx+len(self.closing) :] !=# self.rightline
+    return ''
+  end
+  return repeat("\<C-g>U\<Right>", strchars((idx==0 ? '' : rightline[: idx-1]). self.closing))
+endfunc
+"}}}
+let s:MineCommon = {'Row': 0, 'Colx': 0, 'leftlineQ': '', 'Closing': ''}
 function! s:MineCommon.CharDistanceTo(ctx) abort "{{{
   return a:ctx.Colx==0 ? 0 : strchars(a:ctx.CrrLine[self.Colx : a:ctx.Colx-1])
 endfunc
 "}}}
 function! s:MineCommon.IsValidPos(ctx) abort "{{{
-  return self.row == a:ctx.Row && a:ctx.CrrLine[: self.Colx-1] ==# self.leftlineQ
+  return self.Row == a:ctx.Row && a:ctx.CrrLine[: self.Colx-1] ==# self.leftlineQ
 endfunc
 "}}}
 function! s:MineCommon.IsCrrNowCharEqualClosingBgn(ctx) abort "{{{
@@ -50,10 +62,10 @@ function! s:newQuoteMine(def, ctxer) abort "{{{
   let u = extend(copy(s:QuoteMine), s:MineCommon, 'keep')
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
-  let u.row = a:ctxer.Row
+  let u.Row = a:ctxer.Row
   let u.Colx = a:ctxer.Colx
   let u.Opening = a:def.Opening
-  let u.Closing = a:def.Trig
+  let u.Closing = a:def.Opening
   return u
 endfunc
 "}}}
@@ -61,7 +73,7 @@ function! s:QuoteMine.IsIgnitable(ctx) abort "{{{
   return a:ctx.CrrLine[a:ctx.Colx :] !~# '^\V'. escape(self.Closing, '\')
 endfunc
 "}}}
-function! s:QuoteMine.UsableNL(ctx) abort "{{{
+function! s:QuoteMine.CanAppendNL(_) abort "{{{
   return 0
 endfunc
 "}}}
@@ -70,7 +82,7 @@ function! s:newPairMine(def, ctxer) abort "{{{
   let u = extend(copy(s:PairMine), s:MineCommon, 'keep')
   let u.leftlineQ = a:ctxer.CrrLine[: a:ctxer.Colx-1]
 
-  let u.row = a:ctxer.Row
+  let u.Row = a:ctxer.Row
   let u.Colx = a:ctxer.Colx
   let u.Opening = a:def.Opening
   let u.Closing = a:def.Closing
@@ -88,12 +100,12 @@ function! s:PairMine.Accum(def, ctxer) abort "{{{
   let self.Closing = self.Closing. a:def.Closing
 endfunc
 "}}}
-function! s:PairMine.UsableNL(ctx) abort "{{{
-  return self.row+1 == a:ctx.Row
+function! s:PairMine.CanAppendNL(ctx) abort "{{{
+  return a:ctx.CrrLine[a:ctx.Colx :] == '' && a:ctx.Row == self.Row + 1
 endfunc
 "}}}
 function! s:PairMine.AppendNL(ctx) abort "{{{
-  call append(a:ctx.Row, repeat(' ', indent(self.row)). self.Closing)
+  call append(a:ctx.Row, repeat(' ', indent(self.Row)). self.Closing)
 endfunc
 "}}}
 let s:Contexter = {}
@@ -249,6 +261,7 @@ function! autoclosing#insert_pre() abort "{{{
 endfunc
 "}}}
 function! autoclosing#cleanup() abort "{{{
+  call s:Leavablee.Reset()
   let [s:mines, s:within_butt, s:almostvalid, s:during_feedkeys, s:feedkeys, s:save_row, s:save_colx] = [[], {}, {}, 0, '', 0, 0]
   unlet! s:_c2def s:inhibition_pats s:_changedtick s:batch_len s:save_row s:save_colx
 endfunc
@@ -313,9 +326,12 @@ endfunc
 function! s:caseof_noinput(ctx, is_changed) abort "{{{
   let [s:within_butt, s:gone_butt] = [{}, {}]
   if !a:is_changed
-    let [s:leavable_str, s:leavable_rightline] = ['', '']
-  elseif s:mines!=[] && s:mines[0].UsableNL(a:ctx)
-    call s:mines[0].AppendNL(a:ctx)
+    call s:Leavablee.Reset()
+  elseif s:mines!=[] && s:mines[0].Row != a:ctx.Row
+    call s:Leavablee.Reset()
+    if s:mines[0].CanAppendNL(a:ctx)
+      call s:mines[0].AppendNL(a:ctx)
+    end
   end
   let s:mines = []
   if !(a:is_changed && s:almostvalid!={} && s:almostvalid.IsValidPos(a:ctx))
@@ -388,8 +404,8 @@ function! s:sep_inputted_then_turn(ctxer, _, feeds) abort "{{{
     return ''
   end
   let str = s:gone_butt.Closing. a:ctxer.Trig
-  call add(a:feeds , repeat("\<C-g>U\<Left>", strchars(s:gone_butt.Closing. a:ctxer.Trig)))
-  let [s:leavable_str, s:leavable_rightline] = [str, a:ctxer.RightLine]
+  call add(a:feeds , repeat("\<C-g>U\<Left>", strchars(str)))
+  call s:Leavablee.Reset().Store(str, a:ctxer)
   let s:gone_butt = {}
   return 'sep_inputted_then_turn'
 endfunc
@@ -410,8 +426,7 @@ function! s:ignite_mines(ctxer, feeds) abort "{{{
     else
       call add(a:feeds, mine.Closing. repeat("\<C-g>U\<Left>", strchars(mine.Closing)))
       let s:within_butt = mine
-      let s:leavable_rightline = a:ctxer.RightLine[len(s:leavable_str) :]
-      let s:leavable_str = mine.Closing. s:leavable_str
+      call s:Leavablee.Store(mine.Closing, a:ctxer)
     end
     let is_first = 0
   endwhile
