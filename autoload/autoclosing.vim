@@ -121,7 +121,7 @@ endfunc
 function! s:Contexter.About(trig, colx) abort "{{{
   let self.Colx = a:colx
   let l = a:colx-1-len(a:trig)
-  let self.LeftLine = l <= 0 ? '' : self.CrrLine[: l]
+  let self.LeftLine = l < 0 ? '' : self.CrrLine[: l]
 
   let self.Trig = a:trig
   let self.TrigE = escape(a:trig, '\')
