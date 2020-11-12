@@ -165,11 +165,11 @@ endfunc
 "}}}
 
 function! autoclosing#init() abort "{{{
-  if !exists('g:autoclosing_def')
-    return
-  end
   let [s:chr2defs, s:chr2clldefs, s:cllTrgDefs, s:exclusionPats] = [{}, {}, [], []]
   let [s:_changedtick, s:batch_len] = [b:changedtick, 0]
+  if !(v:insertmode=='i' && exists('g:autoclosing_def'))
+    return
+  end
   let s:inhibition_pats = s:filter_by_buftype_and(g:autoclosing_inhibition_pat, function('s:F_val'))
   let [condi2ds, excl_condi2ds, excl_condi2pat, s:chr2clldefs, s:cllTrgDefs] = s:parse_collecstr_n_split_remain(g:autoclosing_def)
   let [s:excl_ds, s:excl_pat] = map([excl_condi2ds, excl_condi2pat], 's:filter_by_buftype_and(v:val, function("s:F_nudeval"))')
@@ -297,6 +297,9 @@ endfunc
 
 let [s:during_feedkeys, s:save_row, s:save_colx, s:feedkeys] = [0, 0, 0, '']
 function! autoclosing#chk_et_append() abort "{{{
+  if !exists('s:inhibition_pats')
+    return
+  end
   let ctx = {'Row': line('.'), 'Colx': col('.')-1, 'CrrLine': getline('.')}
   if s:during_feedkeys && s:save_row == ctx.Row
     let targstr = ctx.CrrLine[s:save_colx : ctx.Colx-1]
