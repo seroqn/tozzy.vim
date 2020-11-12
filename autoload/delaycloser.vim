@@ -9,7 +9,6 @@ let s:mines = []
 let s:almostvalid = {} " 設置されたのに発火条件を満たさなくなったもの. <BS>で発動条件を満たすと復活する
 let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
-let s:batch_len = 0
 
 function! delaycloser#is_leavable() abort "{{{
   return s:Leavablee.GetRhs()!=''
@@ -46,6 +45,54 @@ function! s:Leavablee.GetRhs() abort "{{{
   return repeat("\<C-g>U\<Right>", strchars((idx==0 ? '' : rightline[: idx-1]). self.closing))
 endfunc
 "}}}
+let s:FeedWatcher = {'DuringFeedkeys': 0, 'Feedkeys': '', 'save_row': 0, 'save_colx': 0}
+function! s:FeedWatcher.Reset() abort "{{{
+  let [self.DuringFeedkeys, self.Feedkeys, self.save_row, self.save_colx] = [0, '', 0, 0]
+endfunc
+"}}}
+function! s:FeedWatcher.RegisterStart(feedkeys, ctx) abort "{{{
+  let self.DuringFeedkeys = 1
+  let self.Feedkeys = a:feedkeys
+  let self.save_row = a:ctx.Row
+  let self.save_colx = a:ctx.Colx
+endfunc
+"}}}
+function! s:FeedWatcher.CanGuessTargstr(ctx) abort "{{{
+  return self.save_row == a:ctx.Row
+endfunc
+"}}}
+function! s:FeedWatcher.GuessTargstr(ctx) abort "{{{
+  return [a:ctx.CrrLine[self.save_colx : a:ctx.Colx-1], self.save_colx]
+endfunc
+"}}}
+let s:ChangeWatcher = {'changedtick': 0, 'BatchLen': 0}
+function! s:ChangeWatcher.Reset() abort "{{{
+  let self.changedtick = b:changedtick
+  let self.BatchLen = 0
+  return self.changedtick != b:changedtick
+endfunc
+"}}}
+let s:Excluder = {}
+function! s:newExcluder(excl_condi2ds, excl_condi2pats) abort "{{{
+  let u = copy(s:Excluder)
+  let u.defs = s:filter_by_buftype_and(a:excl_condi2ds, function("s:F_nudeval"))
+  let u.pats = s:filter_by_buftype_and(a:excl_condi2pats, function("s:F_nudeval"))
+  return u
+endfunc
+"}}}
+function! s:Excluder.ShouldExclude(defstr) abort "{{{
+  if index(self.defs, a:defstr)!=-1
+    return 1
+  end
+  for pat in self.pats
+    if a:defstr =~# pat
+      return 1
+    end
+  endfor
+  return 0
+endfunc
+"}}}
+
 let s:MineCommon = {'Row': 0, 'Colx': 0, 'leftlineQ': '', 'Closing': ''}
 function! s:MineCommon.CharDistanceTo(ctx) abort "{{{
   return a:ctx.Colx==0 ? 0 : strchars(a:ctx.CrrLine[self.Colx : a:ctx.Colx-1])
@@ -167,18 +214,17 @@ endfunc
 "}}}
 
 function! delaycloser#init() abort "{{{
-  let [s:chr2defs, s:chr2clldefs, s:cllTrgDefs, s:exclusionPats] = [{}, {}, [], []]
-  let [s:_changedtick, s:batch_len] = [b:changedtick, 0]
   if !(v:insertmode=='i' && exists('g:delaycloser_def'))
     return
   end
+  let [s:chr2defs, s:chr2clldefs, s:cllTrgDefs] = [{}, {}, []]
+  call s:ChangeWatcher.Reset()
   let s:inhibition_pats = s:filter_by_buftype_and(g:delaycloser_inhibition_pat, function('s:F_val'))
-  let [condi2ds, excl_condi2ds, excl_condi2pat, s:chr2clldefs, s:cllTrgDefs] = s:parse_collecstr_n_split_remain(g:delaycloser_def)
-  let [s:excl_ds, s:excl_pat] = map([excl_condi2ds, excl_condi2pat], 's:filter_by_buftype_and(v:val, function("s:F_nudeval"))')
+  let [condi2ds, s:chr2clldefs, s:cllTrgDefs, s:excluder] = s:parse_collecstr_n_split_remain(g:delaycloser_def)
   for [condi, ds] in s:filter_by_buftype_and(condi2ds, function('s:F_items'))
     let condis = split(condi, '|')
     for d in ds
-      if s:matched_exclusion(d)
+      if s:excluder.ShouldExclude(d)
         continue
       end
       let is_imidiate = 0
@@ -203,7 +249,7 @@ function! delaycloser#init() abort "{{{
 endfunc
 "}}}
 function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
-  let [l:condi2ds, l:excl_condi2ds, l:excl_condi2pat, l:chr2clldefs, l:cllTrgDefs] = [{}, {}, {}, {}, []]
+  let [l:condi2ds, l:excl_condi2ds, l:excl_condi2pats, l:chr2clldefs, l:cllTrgDefs] = [{}, {}, {}, {}, []]
   let MATCHSTRPOS = exists('*matchstrpos') ? function('matchstrpos') : function('s:matchstrpos')
   let PRINT_ITEM = '\%(\%(\%(^\|[^%]\)\%(%%\)*\)\@<=%\)\@<!%s'
   let LAST_IS_PRINTITEM = PRINT_ITEM. '$'
@@ -242,7 +288,7 @@ function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
       endwhile
 
       if is_excluded
-        let l:excl_condi2pat[key] = get(l:excl_condi2pat, key, []) + ['^\V'. call('printf', [escape(fmt, '\')] + collec_args). '\$']
+        let l:excl_condi2pats[key] = get(l:excl_condi2pats, key, []) + ['^\V'. call('printf', [escape(fmt, '\')] + collec_args). '\$']
         continue
       end
 
@@ -257,7 +303,7 @@ function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
         else
           let ms = matchlist(fmt, '^\(.*\)\(.\)$')
           let [ofmtx, trig] = [ms[1], ms[2]]
-          let chr2clldefs[trig] = get(chr2clldefs, trig, []) + [{'Condis': condis, 'IsImidiate': is_imidiate, 'Type': 'quote', 'OpeningxPat': call('printf', [escape(ofmtx, '\')] + collec_args)}]
+          let l:chr2clldefs[trig] = get(l:chr2clldefs, trig, []) + [{'Condis': condis, 'IsImidiate': is_imidiate, 'Type': 'quote', 'OpeningxPat': call('printf', [escape(ofmtx, '\')] + collec_args)}]
         end
         continue
       end
@@ -280,43 +326,43 @@ function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
         \ 'Closing': cfmt, 'OpeningxPat': call('printf', [escape(ofmtx, '\')] + collec_args)}]
     endfor
   endfor
-  return [condi2ds, excl_condi2ds, excl_condi2pat, chr2clldefs, cllTrgDefs]
+  return [l:condi2ds, l:chr2clldefs, l:cllTrgDefs, s:newExcluder(l:excl_condi2ds, l:excl_condi2pats)]
 endfunc
 "}}}
 function! delaycloser#insert_pre() abort "{{{
-  if !s:during_feedkeys
-    let s:batch_len += 1
+  if !s:FeedWatcher.DuringFeedkeys
+    let s:ChangeWatcher.BatchLen += 1
   end
 endfunc
 "}}}
 function! delaycloser#cleanup() abort "{{{
   call s:Leavablee.Reset()
-  let [s:mines, s:almostvalid, s:within_butt, s:gone_butt, s:during_feedkeys, s:feedkeys, s:save_row, s:save_colx] = [[], {}, {}, {}, 0, '', 0, 0]
-  unlet! s:chr2defs s:chr2clldefs s:cllTrgDefs s:exclusionPats s:excl_ds s:excl_pat
-  unlet! s:inhibition_pats s:_changedtick s:batch_len
+  call s:FeedWatcher.Reset()
+  call s:ChangeWatcher.Reset()
+  let [s:mines, s:almostvalid, s:within_butt, s:gone_butt] = [[], {}, {}, {}]
+  unlet! s:chr2defs s:chr2clldefs s:cllTrgDefs s:excluder s:inhibition_pats
 endfunc
 "}}}
 
-let [s:during_feedkeys, s:save_row, s:save_colx, s:feedkeys] = [0, 0, 0, '']
 function! delaycloser#chk_et_append() abort "{{{
-  if !exists('s:inhibition_pats')
+  if !exists('s:chr2defs')
     return
   end
   let ctx = {'Row': line('.'), 'Colx': col('.')-1, 'CrrLine': getline('.')}
-  if s:during_feedkeys && s:save_row == ctx.Row
-    let targstr = ctx.CrrLine[s:save_colx : ctx.Colx-1]
-    let tcolx = s:save_colx
+  if s:FeedWatcher.DuringFeedkeys && s:FeedWatcher.CanGuessTargstr(ctx)
+    let [targstr, tcolx] = s:FeedWatcher.GuessTargstr(ctx)
   else
     let MATCHSTRPOS = exists('*matchstrpos') ? function('matchstrpos') : function('s:matchstrpos')
-    let m = ctx.Colx==0 ? '' : MATCHSTRPOS(ctx.CrrLine[: ctx.Colx-1], '.\{'. s:batch_len. '}$', 0)
+    let m = ctx.Colx==0 ? '' : MATCHSTRPOS(ctx.CrrLine[: ctx.Colx-1], '.\{'. s:ChangeWatcher.BatchLen. '}$', 0)
     let [targstr, tcolx] = [m[0], m[1]]
   end
-  let [is_changed, during_feedkeys] = [b:changedtick != s:_changedtick, s:during_feedkeys]
-  let [s:during_feedkeys, s:batch_len, s:_changedtick] = [0, 0, b:changedtick]
+  let during_feedkeys = s:FeedWatcher.DuringFeedkeys
+  let is_changed = s:ChangeWatcher.Reset()
+  let s:FeedWatcher.DuringFeedkeys = 0
   if targstr!=''
     return s:caseof_input(ctx, targstr, tcolx)
   end
-  return during_feedkeys ? 'feedkeys `'. s:feedkeys. '`' : s:caseof_noinput(ctx, is_changed)
+  return during_feedkeys ? 'feedkeys `'. s:FeedWatcher.Feedkeys. '`' : s:caseof_noinput(ctx, is_changed)
 endfunc
 "}}}
 function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
@@ -350,7 +396,7 @@ function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
   end
   let str = join(feeds, '')
   if str!=''
-    let [s:during_feedkeys, s:save_row, s:save_colx, s:feedkeys] = [1, a:ctx.Row, a:ctx.Colx, str]
+    call s:FeedWatcher.RegisterStart(str, a:ctx)
     call feedkeys(str, 'n')
   end
   return result
@@ -503,23 +549,11 @@ function! s:F_items(items) abort "{{{
   return [a:items]
 endfunc
 "}}}
-function! s:matched_exclusion(defstr) abort "{{{
-  if index(s:excl_ds, a:defstr)!=-1
-    return 1
-  end
-  for pat in s:excl_pat
-    if a:defstr =~# pat
-      return 1
-    end
-  endfor
-  return 0
-endfunc
-"}}}
 function! s:obtain_def(ctxer) abort "{{{
   let trig = a:ctxer.Trig
   let defs1 = get(s:chr2defs, trig, [])
-  let defs2 = filter(get(s:chr2clldefs, trig, [])[:], 'a:ctxer.ApplyRegexpDef(v:val) && !s:matched_exclusion(v:val.DefStr)')
-  let defs3 = filter(s:cllTrgDefs[:], 'trig =~# v:val.TrigPat && a:ctxer.ApplyRegexpDef(v:val) && !s:matched_exclusion(v:val.DefStr)')
+  let defs2 = filter(get(s:chr2clldefs, trig, [])[:], 'a:ctxer.ApplyRegexpDef(v:val) && !s:excluder.ShouldExclude(v:val.DefStr)')
+  let defs3 = filter(s:cllTrgDefs[:], 'trig =~# v:val.TrigPat && a:ctxer.ApplyRegexpDef(v:val) && !s:excluder.ShouldExclude(v:val.DefStr)')
   if defs1==[] && defs2==[] && defs3==[]
     return {}
   end
