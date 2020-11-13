@@ -9,6 +9,7 @@ let s:mines = []
 let s:almostvalid = {} " 設置されたのに発火条件を満たさなくなったもの. <BS>で発動条件を満たすと復活する
 let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
+let s:disable_next_cursormoved = 0
 
 function! tozzy#is_leavable() abort "{{{
   return s:Leavablee.GetRhs()!=''
@@ -18,6 +19,15 @@ function! tozzy#leave() abort "{{{
   let rhs = s:Leavablee.GetRhs()
   call s:Leavablee.Reset()
   return rhs
+endfunc
+"}}}
+function! tozzy#i_ctrl_r_alt(...) abort "{{{
+  let s:disable_next_cursormoved = 1
+  if a:0
+    let s:FeedWatcher.DuringFeedkeys = 1
+    call feedkeys(a:1, 'n')
+  end
+  return "\<C-r>"
 endfunc
 "}}}
 
@@ -50,7 +60,7 @@ function! s:FeedWatcher.Reset() abort "{{{
   let [self.DuringFeedkeys, self.Feedkeys, self.save_row, self.save_colx] = [0, '', 0, 0]
 endfunc
 "}}}
-function! s:FeedWatcher.RegisterStart(feedkeys, ctx) abort "{{{
+function! s:FeedWatcher.SaveStartStatus(feedkeys, ctx) abort "{{{
   let self.DuringFeedkeys = 1
   let self.Feedkeys = a:feedkeys
   let self.save_row = a:ctx.Row
@@ -329,6 +339,10 @@ function! s:parse_collecstr_n_split_remain(tozzy_def) abort "{{{
   return [l:condi2ds, l:chr2clldefs, l:cllTrgDefs, s:newExcluder(l:excl_condi2ds, l:excl_condi2pats)]
 endfunc
 "}}}
+function! tozzy#safestate() abort "{{{
+  let s:disable_next_cursormoved = 0
+endfunc
+"}}}
 function! tozzy#insert_pre() abort "{{{
   if !s:FeedWatcher.DuringFeedkeys
     let s:ChangeWatcher.BatchLen += 1
@@ -339,6 +353,7 @@ function! tozzy#cleanup() abort "{{{
   call s:Leavablee.Reset()
   call s:FeedWatcher.Reset()
   call s:ChangeWatcher.Reset()
+  let s:disable_next_cursormoved = 0
   let [s:mines, s:almostvalid, s:within_butt, s:gone_butt] = [[], {}, {}, {}]
   unlet! s:chr2defs s:chr2clldefs s:cllTrgDefs s:excluder s:inhibition_pats
 endfunc
@@ -359,10 +374,13 @@ function! tozzy#chk_et_append() abort "{{{
   let during_feedkeys = s:FeedWatcher.DuringFeedkeys
   let is_changed = s:ChangeWatcher.Reset()
   let s:FeedWatcher.DuringFeedkeys = 0
-  if targstr!=''
-    return s:caseof_input(ctx, targstr, tcolx)
+  if targstr==''
+    return during_feedkeys ? 'feedkeys `'. s:FeedWatcher.Feedkeys. '`' : s:caseof_noinput(ctx, is_changed)
+  elseif s:disable_next_cursormoved
+    let s:disable_next_cursormoved = 0
+    return
   end
-  return during_feedkeys ? 'feedkeys `'. s:FeedWatcher.Feedkeys. '`' : s:caseof_noinput(ctx, is_changed)
+  return s:caseof_input(ctx, targstr, tcolx)
 endfunc
 "}}}
 function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
@@ -396,7 +414,7 @@ function! s:caseof_input(ctx, targstr, tcolx) abort "{{{
   end
   let str = join(feeds, '')
   if str!=''
-    call s:FeedWatcher.RegisterStart(str, a:ctx)
+    call s:FeedWatcher.SaveStartStatus(str, a:ctx)
     call feedkeys(str, 'n')
   end
   return result
