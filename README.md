@@ -39,7 +39,7 @@ inoremap <silent><expr><C-r><C-y> tozzy#i_ctrl_r_alt('+')
 inoremap <silent><expr><C-r><C-f> tozzy#i_ctrl_r_alt("=expand('%:t')\<CR>")
 ```
 
-#### `tozzy#is_leavable()` と `tozzy#leave()`
+#### 閉じ文字を抜ける― `tozzy#is_leavable()` と `tozzy#leave()`
 
 `((x` と入力して、`((x|))` となっているとき（`|` はカーソル）、`tozzy#leave()` を（`:map-<expr>` モードで）実行すると、閉じ括弧を抜けて `((x))|` にカーソルが移動します。`tozzy#leave()` が実行できるとき `tozzy#is_leavable()` は非0 になります。
 
