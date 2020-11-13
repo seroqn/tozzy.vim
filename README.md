@@ -1,17 +1,17 @@
-# delaycloser.vim
+# tozzy.vim
 Insert-mode にて、クォートや括弧など（ペア）の、閉じ文字を補完します。
 
 既存のペア補完系プラグインが開き文字（例えば `{` ）を入力したとき直後に即座に閉じ文字 `}` を補完するのに対して、当プラグインは開き文字の後に任意の一文字が入力されるまで補完を遅延します（ `{` では閉じ文字は補完されず `{x` までタイプしたときはじめて `}` が補完されます）。
 
 また、キーマップを汚しません。マルチバイト文字に対応します。割と古い Vim でも動くかもしれません。
 
-某プラグインと違って閉じ文字の前で閉じ文字を入力しても閉じ文字を脱出することはできません（例外あり）。補完された閉じ文字を抜けるときは基本は `<Left>` か、または `delaycloser#leave()` をキーマップに割り当ててご利用ください。
+某プラグインと違って閉じ文字の前で閉じ文字を入力しても閉じ文字を脱出することはできません（例外あり）。補完された閉じ文字を抜けるときは基本は `<Left>` か、または `tozzy#leave()` をキーマップに割り当ててご利用ください。
 
 ## 設定
-### `g:delaycloser_def`
+### `g:tozzy_def`
 規定値： ``{'*': ['"', "'", '`', '( )', '[ ]', '{ }'], 'vim': [' `']}``
 
-`g:delaycloser_def` は辞書で、キーには適用したいバッファのパターン(ファイルタイプまたは拡張子）、値には文字列のリストを設定します。
+`g:tozzy_def` は辞書で、キーには適用したいバッファのパターン(ファイルタイプまたは拡張子）、値には文字列のリストを設定します。
 このリストにはクォートかペア（括弧など開き文字と閉じ文字を持つもの）を表す文字列を設定します。
 
 ペアは半角スペースを挟んで定義します。`"[ ]"` なら開始文字は `[`、終了文字は `]` です。半角スペースで分かれていない文字はクォートと見なされます。クォートはペアとルールや挙動が異なります。
@@ -20,18 +20,18 @@ Insert-mode にて、クォートや括弧など（ペア）の、閉じ文字�
 
 設定例：
 ```vim
-let g:delaycloser_def = {}
-let g:delaycloser_def["*"] = ['"', "'", '( )', '[ ]', '{ }', '「 」', '（ ）', '【 】']
-let g:delaycloser_def["html"] = ["<!--  -->", "/**  */"]
+let g:tozzy_def = {}
+let g:tozzy_def["*"] = ['"', "'", '( )', '[ ]', '{ }', '「 」', '（ ）', '【 】']
+let g:tozzy_def["html"] = ["<!--  -->", "/**  */"]
 ```
 
 
-#### `g:delaycloser_def` の辞書キー（バッファパターン）について
+#### `g:tozzy_def` の辞書キー（バッファパターン）について
 ```vim
-let g:delaycloser_def = {}
-let g:delaycloser_def["*"] = ['"', "'", '( )', '[ ]', '{ }']
-let g:delaycloser_def["html|*react|.jsx"] = ['< >']
-let g:delaycloser_def["html"] = ["<!--  -->", "/**  */"]
+let g:tozzy_def = {}
+let g:tozzy_def["*"] = ['"', "'", '( )', '[ ]', '{ }']
+let g:tozzy_def["html|*react|.jsx"] = ['< >']
+let g:tozzy_def["html"] = ["<!--  -->", "/**  */"]
 ```
 
 `*` だけの辞書キーはグローバルな設定です。個別な設定と被っていた場合、個別な設定の方が優先されます。
@@ -42,24 +42,24 @@ let g:delaycloser_def["html"] = ["<!--  -->", "/**  */"]
 
 `.` から始まる名前はファイルタイプではなくバッファ名の拡張子でマッチさせます（拡張子でマッチさせるときにはワイルドカードは使えません）。`.jsx` なら拡張子が `jsx` であるバッファにマッチします。
 
-したがって、`g:delaycloser_def["html|*react|.jsx"]` は3種類の定義のどれかにマッチすればその設定が適用されます。すなわち、ファイルタイプが `html` のもの、 `javascriptreact` `typescriptreact` のように末尾に "react" を含むファイルタイプ、または拡張子が `.jsx` であるバッファにマッチします。
+したがって、`g:tozzy_def["html|*react|.jsx"]` は3種類の定義のどれかにマッチすればその設定が適用されます。すなわち、ファイルタイプが `html` のもの、 `javascriptreact` `typescriptreact` のように末尾に "react" を含むファイルタイプ、または拡張子が `.jsx` であるバッファにマッチします。
 
-加えて、ファイルタイプ `html` は、その後に個別で `g:delaycloser_def["html"]` も定義されているので、その設定も適用されます。
+加えて、ファイルタイプ `html` は、その後に個別で `g:tozzy_def["html"]` も定義されているので、その設定も適用されます。
 
-#### `g:delaycloser_def` の値のリスト内の文字列の表記ルール（クォート・ペアの表記ルール）
+#### `g:tozzy_def` の値のリスト内の文字列の表記ルール（クォート・ペアの表記ルール）
 ペアは半角スペースを挟んで定義します。'( )' なら開始文字は '('、終了文字は ')' です。半角スペースで分かれていない文字はクォートと見なされます。
 ##### 先頭が空白で始まる定義は否定と見なされます。
 ```vim
-let g:delaycloser_def = {}
-let g:delaycloser_def["*"] = ['"', "'", '`', '( )', '[ ]', '{ }']
-let g:delaycloser_def["vim"] = [' `']
+let g:tozzy_def = {}
+let g:tozzy_def["*"] = ['"', "'", '`', '( )', '[ ]', '{ }']
+let g:tozzy_def["vim"] = [' `']
 ```
 
 全体ルールでは `` ` `` が定義されていますが、ファイルタイプ `vim` では `` ` `` をクォートとして扱いたくないため、半角スペースから始まる定義で打ち消しています。
 
 ##### 末尾が空白で終わる定義は即時展開されます。
 ```vim
-let g:delaycloser_def["*"] = ['{ } ']
+let g:tozzy_def["*"] = ['{ } ']
 ```
 
 通常、`{` の後に任意の一文字を入力しないと `}` は補完されませんが、`"{ } "` のように設定していると、`{` を入力すると同時に `}` が補完されます。ほかのプラグインと同じような挙動になります。
@@ -70,18 +70,18 @@ let g:delaycloser_def["*"] = ['{ } ']
 Vimの正規表現の collection を使っているのでそれと同じように、文字 `]` `^` `-` `\` は特別な意味を持ちます。これらをコレクション内で使うにはバックスラッシュでエスケープします。
 
 ```vim
-let g:delaycloser_def[".ejs"] = ['<% %>', '<%&&[=\-#%] %> ']
+let g:tozzy_def[".ejs"] = ['<% %>', '<%&&[=\-#%] %> ']
 ```
 これはバッファ名拡張子 `.ejs` のバッファにおいて、'<% %>' と、'<%= %>' '<%- %>' '<%# %>' '<%% %>' に展開されます。
 
 Pythonの `f"..."` `r"..."` `b"..."` `u"..."` など頭にアルファベットが付いた文字列に使う場合の例：
 ```vim
-let g:delaycloser_def["python"] = ['&&[frbu]&&["'']']   " クォートとして
+let g:tozzy_def["python"] = ['&&[frbu]&&["'']']   " クォートとして
 ```
 
 Rubyの %記法に使う場合の例：
 ```vim
-let g:delaycloser_def["ruby"] = ['%&&[qQwWiIxs]&&[!`]', '%&&[qQwWiIxs]{ }', '%&&[qQwWiIxs]( )']
+let g:tozzy_def["ruby"] = ['%&&[qQwWiIxs]&&[!`]', '%&&[qQwWiIxs]{ }', '%&&[qQwWiIxs]( )']
 ```
 
 #### 即時展開とコレクションの組み合わせ
@@ -91,15 +91,15 @@ let g:delaycloser_def["ruby"] = ['%&&[qQwWiIxs]&&[!`]', '%&&[qQwWiIxs]{ }', '%&&
 
 その場合、例えば以下のように定義します。
 ```vim
-let g:delaycloser_def["vim"] = ['<&&[a-zA-Z] > ']
+let g:tozzy_def["vim"] = ['<&&[a-zA-Z] > ']
 ```
 キーマップに使うときの角括弧は `<` の隣が半角英数なので、コレクション `&&[a-zA-Z]` で対象にします。定義の末に空白を含めることで即時展開するようにして、`<` の後に半角英数が入力されたときに閉じ括弧を補完します。
 
 - - -
-### `g:delaycloser_inhibition_pat`: 閉じ文字補完の抑制
+### `g:tozzy_inhibition_pat`: 閉じ文字補完の抑制
 規定値： `{'vim': '^\s*".\%#\|" \%#$'}`
 
-`g:delaycloser_def` は辞書で、キーには `g:delaycloser_def` のようにファイルタイプ名やファイル拡張子を指定し、値にカーソルパターン `\%#` を含むパターン文字列を指定します。
+`g:tozzy_def` は辞書で、キーには `g:tozzy_def` のようにファイルタイプ名やファイル拡張子を指定し、値にカーソルパターン `\%#` を含むパターン文字列を指定します。
 
 このパターンにマッチしたときには閉じ文字の自動挿入を抑制します。
 
@@ -111,18 +111,18 @@ let g:delaycloser_def["vim"] = ['<&&[a-zA-Z] > ']
 
 これらを `\|` で繋いで以下のように設定すれば、コメントとして `"` を入力するときの閉じ文字補完を抑制できます。
 ```
-let g:delaycloser_inhibition_pat = {}
-let g:delaycloser_inhibition_pat["vim"] = '^\s*".\%#\|" \%#$'
+let g:tozzy_inhibition_pat = {}
+let g:tozzy_inhibition_pat["vim"] = '^\s*".\%#\|" \%#$'
 ```
 
 - - -
-### `delaycloser#is_leavable()` と `delaycloser#leave()`
+### `tozzy#is_leavable()` と `tozzy#leave()`
 
-`((x` と入力して、`((x|))` となっているとき（`|` はカーソル）、`delaycloser#leave()` を（`:map-<expr>` モードで）実行すると、閉じ括弧を抜けて `((x))|` にカーソルが移動します。`delaycloser#leave()` が実行できるとき `delaycloser#is_leavable()` は非0 になります。
+`((x` と入力して、`((x|))` となっているとき（`|` はカーソル）、`tozzy#leave()` を（`:map-<expr>` モードで）実行すると、閉じ括弧を抜けて `((x))|` にカーソルが移動します。`tozzy#leave()` が実行できるとき `tozzy#is_leavable()` は非0 になります。
 
 例えばタブキーに機能を割り当てて抜けれるときに `<Tab>` で閉じ括弧や閉じクォートを抜けるようにするには：
 ```vim
-inoremap <silent><expr><Tab>  delaycloser#is_leavable() ? delaycloser#leave() : "\<Tab>"
+inoremap <silent><expr><Tab>  tozzy#is_leavable() ? tozzy#leave() : "\<Tab>"
 ```
 
 ## クォートとペアの違い
@@ -131,12 +131,12 @@ inoremap <silent><expr><Tab>  delaycloser#is_leavable() ? delaycloser#leave() : 
 
 #### 長さ2以上の文字列からなるクォートの定義では最後の文字が閉じ文字として使われます
 ```vim
-let g:delaycloser_def["ruby"] = ["%Q!"]
+let g:tozzy_def["ruby"] = ["%Q!"]
 ```
 この場合 `!` が閉じ文字として使われます。`%Q!` の後に `foobar` を入力すると、展開結果は `%Q!foobar!`
 
 ```vim
-let g:delaycloser_def["python"] = ['f&&["'']']
+let g:tozzy_def["python"] = ['f&&["'']']
 ```
 この場合コレクション文字 `"'` のうち、実際に開始文字として使われた方が閉じ文字として使われます。`f"` で入力があれば閉じ文字は `"`
 

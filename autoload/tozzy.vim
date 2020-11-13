@@ -2,7 +2,7 @@ if exists('s:save_cpo')| finish| endif
 let s:save_cpo = &cpo| set cpo&vim
 scriptencoding utf-8
 "=============================================================================
-let g:delaycloser_enable_separator_turnback = 0
+let g:tozzy_enable_separator_turnback = 0
 
 let s:EMPBACK_SEPS = [',']
 let s:mines = []
@@ -10,11 +10,11 @@ let s:almostvalid = {} " 設置されたのに発火条件を満たさなくな�
 let s:within_butt = {} " for handle_inserted_1char_n_closing
 let s:gone_butt = {} " for sep_inputted_then_turn
 
-function! delaycloser#is_leavable() abort "{{{
+function! tozzy#is_leavable() abort "{{{
   return s:Leavablee.GetRhs()!=''
 endfunc
 "}}}
-function! delaycloser#leave() abort "{{{
+function! tozzy#leave() abort "{{{
   let rhs = s:Leavablee.GetRhs()
   call s:Leavablee.Reset()
   return rhs
@@ -213,14 +213,14 @@ function! s:Contexter.FailInPair(def) abort "{{{
 endfunc
 "}}}
 
-function! delaycloser#init() abort "{{{
-  if !(v:insertmode=='i' && exists('g:delaycloser_def'))
+function! tozzy#init() abort "{{{
+  if !(v:insertmode=='i' && exists('g:tozzy_def'))
     return
   end
   let [s:chr2defs, s:chr2clldefs, s:cllTrgDefs] = [{}, {}, []]
   call s:ChangeWatcher.Reset()
-  let s:inhibition_pats = s:filter_by_buftype_and(g:delaycloser_inhibition_pat, function('s:F_val'))
-  let [condi2ds, s:chr2clldefs, s:cllTrgDefs, s:excluder] = s:parse_collecstr_n_split_remain(g:delaycloser_def)
+  let s:inhibition_pats = s:filter_by_buftype_and(g:tozzy_inhibition_pat, function('s:F_val'))
+  let [condi2ds, s:chr2clldefs, s:cllTrgDefs, s:excluder] = s:parse_collecstr_n_split_remain(g:tozzy_def)
   for [condi, ds] in s:filter_by_buftype_and(condi2ds, function('s:F_items'))
     let condis = split(condi, '|')
     for d in ds
@@ -248,7 +248,7 @@ function! delaycloser#init() abort "{{{
   endfor
 endfunc
 "}}}
-function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
+function! s:parse_collecstr_n_split_remain(tozzy_def) abort "{{{
   let [l:condi2ds, l:excl_condi2ds, l:excl_condi2pats, l:chr2clldefs, l:cllTrgDefs] = [{}, {}, {}, {}, []]
   let MATCHSTRPOS = exists('*matchstrpos') ? function('matchstrpos') : function('s:matchstrpos')
   let PRINT_ITEM = '\%(\%(\%(^\|[^%]\)\%(%%\)*\)\@<=%\)\@<!%s'
@@ -256,7 +256,7 @@ function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
   let COLLEC_STR = '&&\[.\{-}\%(\%(\%(^\|[^\\]\)\%(\\\\\)*\)\@<=\\\)\@<!]'
   let COLLEC_CORE = '&&\zs\[.\{-}\%(\%(\%(^\|[^\\]\)\%(\\\\\)*\)\@<=\\\)\@<!]'
   let ret = []
-  for [key, ds] in items(a:delaycloser_def)
+  for [key, ds] in items(a:tozzy_def)
     for d in ds
       if d !~ '&&['
         if d =~ '^\s'
@@ -329,13 +329,13 @@ function! s:parse_collecstr_n_split_remain(delaycloser_def) abort "{{{
   return [l:condi2ds, l:chr2clldefs, l:cllTrgDefs, s:newExcluder(l:excl_condi2ds, l:excl_condi2pats)]
 endfunc
 "}}}
-function! delaycloser#insert_pre() abort "{{{
+function! tozzy#insert_pre() abort "{{{
   if !s:FeedWatcher.DuringFeedkeys
     let s:ChangeWatcher.BatchLen += 1
   end
 endfunc
 "}}}
-function! delaycloser#cleanup() abort "{{{
+function! tozzy#cleanup() abort "{{{
   call s:Leavablee.Reset()
   call s:FeedWatcher.Reset()
   call s:ChangeWatcher.Reset()
@@ -344,7 +344,7 @@ function! delaycloser#cleanup() abort "{{{
 endfunc
 "}}}
 
-function! delaycloser#chk_et_append() abort "{{{
+function! tozzy#chk_et_append() abort "{{{
   if !exists('s:chr2defs')
     return
   end
@@ -476,7 +476,7 @@ function! s:set_mine(ctxer, def, feeds) abort "{{{
 endfunc
 "}}}
 function! s:sep_inputted_then_turn(ctxer, _, feeds) abort "{{{
-  if s:gone_butt=={} || !g:delaycloser_enable_separator_turnback
+  if s:gone_butt=={} || !g:tozzy_enable_separator_turnback
     return ''
   elseif !(index(s:EMPBACK_SEPS, a:ctxer.Trig)!=-1 && s:gone_butt.IsValidPos(a:ctxer) && a:ctxer.LeftLine =~# '\V'. escape(s:gone_butt.Opening. s:gone_butt.Closing, '\'). '\$')
     let s:gone_butt = {}
@@ -592,7 +592,7 @@ function! s:matchstrpos(str, pat, start) abort "{{{
   return [a:str[bgn : end-1], bgn, end]
 endfunc
 "}}}
-function! delaycloser#__warning(msg) abort "{{{
+function! tozzy#__warning(msg) abort "{{{
   echoh Error
   echom "autocloser.vim: ". a:msg
   echoh NONE
