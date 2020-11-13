@@ -23,9 +23,18 @@ endfunc
 "}}}
 function! tozzy#i_ctrl_r_alt(...) abort "{{{
   let s:disable_next_cursormoved = 1
-  if a:0
-    let s:FeedWatcher.DuringFeedkeys = 1
-    call feedkeys(a:1, 'n')
+  if a:0 == 0 || type(a:1) != (exists('v:t_dict') ? v:t_dict : type({})) || a:1=={}
+    return "\<C-r>"
+  end
+  let char = getchar()
+  if type(char)==(exists('v:t_number') ? v:t_number : type(0))
+    let char = nr2char(char)
+  end
+  let s:FeedWatcher.DuringFeedkeys = 1
+  if has_key(a:1, char)
+    call feedkeys(a:1[char], 'n')
+  else
+    call feedkeys(char, 'n')
   end
   return "\<C-r>"
 endfunc

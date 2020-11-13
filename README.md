@@ -32,11 +32,9 @@ inoremap <C-r><C-y>   <C-r>+
 inoremap <C-r><C-f>   <C-r>=expand('%:t')<CR>
 ```
 
-代わりに以下のように書き換えることができます。`tozzy#i_ctrl_r_alt()` に引数として渡された文字列は `<C-R>` の後のタイピングに適用されます。
+代わりに以下のように書き換えることができます。`tozzy#i_ctrl_r_alt()` に引数として渡された辞書はキーに`<C-r>` に続く2番目のキーマップ、値に `<C-r>` に続くリマップを定義します。
 ```vim
-inoremap <silent><expr><C-r><C-e> tozzy#i_ctrl_r_alt('"')
-inoremap <silent><expr><C-r><C-y> tozzy#i_ctrl_r_alt('+')
-inoremap <silent><expr><C-r><C-f> tozzy#i_ctrl_r_alt("=expand('%:t')\<CR>")
+inoremap <silent><expr><C-r> tozzy#i_ctrl_r_alt({"\<C-e>": '"', "\<C-y>": "+", "\<C-f>": "\<C-r>=expand('%:t')\<CR>"})
 ```
 
 #### 閉じ文字を抜ける― `tozzy#is_leavable()` と `tozzy#leave()`
